@@ -1,0 +1,28 @@
+# ==========================================================================
+# CRE WORKFLOW SETTINGS – Perps signals (cron → price → signal → backend)
+# ==========================================================================
+
+local-simulation:
+  user-workflow:
+    workflow-name: "perps-signals"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.json"
+    secrets-path: ""
+
+staging:
+  user-workflow:
+    workflow-name: "perps-signals"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.json"
+    secrets-path: "./secrets.yaml"
+
+# Target for deploy: workflow runs on DON; set backendBaseUrl in config for production.
+production-settings:
+  user-workflow:
+    workflow-name: "perps-signals"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.json"
+    secrets-path: "./secrets.yaml"
