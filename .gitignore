@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+*.tsbuildinfo
+
+# Env and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+
+# Data and logs
+data/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+prediction-market-demo/
+PRD-Marshmallow.md
+TODO.md
+PRD-Prediction-Markets-Futures-Privacy.md
+contracts/
+cre-workflow/
+docs/
+backend/
