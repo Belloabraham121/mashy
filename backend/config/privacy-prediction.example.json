@@ -1,0 +1,9 @@
+{
+  "vaultAddress": "0xE588a6c73933BFD66Af9b4A07d48bcE59c0D2d13",
+  "paymentTokenAddress": "<SET_SAME_AS_SIMPLE_MARKET_PAYMENT_TOKEN>",
+  "marketAddress": "<SET_SIMPLE_MARKET_CONTRACT_ADDRESS>",
+  "policyEngineAddress": "<SET_POLICY_ENGINE_PROXY_ADDRESS>",
+  "privateTokenApiUrl": "https://convergence2026-token-api.cldev.cloud",
+  "chainId": 11155111,
+  "marshmallowBackendUrl": "http://localhost:3001"
+}
