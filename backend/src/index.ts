@@ -14,6 +14,24 @@ const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
+if (process.env.VERCEL) {
+  app.use((req, _res, next) => {
+    if (req.url?.startsWith("/api")) {
+      req.url = req.url.slice(4) || "/";
+    }
+    next();
+  });
+}
+
+let dbConnectAttempt: Promise<void> | null = null;
+app.use((_req, _res, next) => {
+  if (config.mongodb.uri && !dbConnectAttempt) {
+    dbConnectAttempt = connectDB().then(() => {}, () => {});
+  }
+  if (dbConnectAttempt) dbConnectAttempt.then(() => next(), () => next());
+  else next();
+});
+
 if (config.exposureLedgerPath) {
   loadLedger(config.exposureLedgerPath);
   console.log("[Exposure] Ledger path:", config.exposureLedgerPath);
@@ -30,29 +48,33 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "marshmallow-backend" });
 });
 
-app.listen(config.port, async () => {
-  if (config.mongodb.uri) {
-    try {
-      await connectDB();
-      console.log("[MongoDB] Connected");
-    } catch (e) {
-      console.warn("[MongoDB] Connect failed (auth/trade will fail):", e);
+export { app, connectDB };
+
+if (!process.env.VERCEL) {
+  app.listen(config.port, async () => {
+    if (config.mongodb.uri) {
+      try {
+        await connectDB();
+        console.log("[MongoDB] Connected");
+      } catch (e) {
+        console.warn("[MongoDB] Connect failed (auth/trade will fail):", e);
+      }
     }
-  }
-  const base = `http://localhost:${config.port}`;
-  console.log("");
-  console.log("========================================");
-  console.log("  Marshmallow backend");
-  console.log("========================================");
-  console.log(`  URL:   ${base}`);
-  console.log(`  Port:  ${config.port}`);
-  console.log("  Routes:");
-  console.log(`    GET  ${base}/health`);
-  console.log(`    *    ${base}/api/auth/*`);
-  console.log(`    *    ${base}/api/trade/*`);
-  console.log(`    *    ${base}/api/prediction/*`);
-  console.log(`    *    ${base}/api/perps/*`);
-  console.log(`    *    ${base}/api/admin/* (mint when DEPLOYER_PRIVATE_KEY set)`);
-  console.log(`    GET  ${base}/api/config`);
-  console.log("========================================");
-});
+    const base = `http://localhost:${config.port}`;
+    console.log("");
+    console.log("========================================");
+    console.log("  Marshmallow backend");
+    console.log("========================================");
+    console.log(`  URL:   ${base}`);
+    console.log(`  Port:  ${config.port}`);
+    console.log("  Routes:");
+    console.log(`    GET  ${base}/health`);
+    console.log(`    *    ${base}/api/auth/*`);
+    console.log(`    *    ${base}/api/trade/*`);
+    console.log(`    *    ${base}/api/prediction/*`);
+    console.log(`    *    ${base}/api/perps/*`);
+    console.log(`    *    ${base}/api/admin/* (mint when DEPLOYER_PRIVATE_KEY set)`);
+    console.log(`    GET  ${base}/api/config`);
+    console.log("========================================");
+  });
+}

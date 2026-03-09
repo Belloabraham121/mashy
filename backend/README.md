@@ -37,6 +37,17 @@ npm start
 npm run dev
 ```
 
+## Deploy to Vercel
+
+The backend is set up to run as a single Vercel serverless function.
+
+1. **Create a Vercel project** from this repo and set the **Root Directory** to `backend` (if the repo root is the monorepo).
+2. **Environment variables**: In the Vercel project settings, add the same variables as in `.env.example` (e.g. `JWT_SECRET`, `RPC_URL`, `MONGODB_URI`, `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, contract addresses, etc.). Do not commit `.env`.
+3. **Build**: Vercel runs `npm run build` (TypeScript compile to `dist/`), then the function at `api/index.ts` is used for all routes via the rewrite in `vercel.json`.
+4. **URL**: After deploy, the API is at `https://<your-project>.vercel.app`. Use `/health`, `/api/config`, `/api/auth/*`, etc. as usual.
+
+**Note:** File-based ledgers (`EXPOSURE_LEDGER_PATH`, `PERPS_MARGIN_LEDGER_PATH`) are not persisted across serverless invocations unless you use a read/write store (e.g. Vercel Blob or MongoDB). For production, use MongoDB for perps margin and consider a persistent store for exposure or run settlement from a single source of truth.
+
 ## Routes
 
 | Route | Description |
