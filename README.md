@@ -1,99 +1,66 @@
 # Marshmallow
 
-Privacy-preserving perpetuals and prediction markets with server-signed transactions and Chainlink Runtime (CRE) for decentralized price signals and settlement.
+Privacy-preserving perpetuals and prediction markets with server-signed transactions and Chainlink Runtime Environment (CRE) for decentralized price signals and settlement.
 
----
+## Project Description
 
-## The Problem
+**Marshmallow** is a DeFi protocol that unifies **prediction markets**, **leveraged perpetual futures (perps)**, and **encrypted / private order flow** into a single seamless system. Users can trade real-world outcomes with institutional-grade privacy: positions, balances, margins, and exposure stay off-chain and encrypted where possible, eliminating transparent on-chain visibility that enables exploitation.
 
-DeFi users want to trade **perpetuals** and participate in **prediction markets** without fully exposing positions and balances on-chain. Two main challenges:
+Deposits and withdrawals occur via an on-chain vault for security and verifiability. Pricing relies on **Chainlink Data Feeds** (primary) with CRE-powered fallback signals. Settlement (especially for prediction markets) is driven by Chainlink Runtime Environment (CRE) workflows for decentralized, timely, and trust-minimized resolution—even in private contexts.
 
-1. **Privacy vs. oracles**  
-   Private or off-chain systems still need reliable, timely price data and settlement signals. Relying on a single Chainlink feed or a single backend can create a single point of failure or trust.
+Built for privacy-first traders who want to predict events, take leveraged positions, and manage risk without leaking sensitive information to the chain or MEV actors.
 
-2. **Automated settlement**  
-   Prediction markets need objective, timely resolution. Manually settling each market does not scale, and you want settlement logic that can be driven by on-chain events or external verification (e.g. oracles, DONs).
+## The Problem It Addresses
 
-So: how do you get **decentralized, reliable signals** (prices, funding, settlement triggers) into a **privacy-aware** stack that keeps exposure and margin off-chain where needed?
+DeFi users face major barriers when trading **perpetuals** and participating in **prediction markets** on public blockchains:
 
----
+- **Front-running & MEV bots** — Transparent order flow and visible positions allow sophisticated actors (searchers, bots, validators) to front-run trades, sandwich orders, or liquidate positions profitably, extracting value from users.
+- **Information asymmetry & exposure leakage** — Full on-chain visibility of balances, margins, open positions, and order intent exposes traders to targeted attacks, copy-trading, or predatory behavior.
+- **Privacy vs. reliable oracles & settlement** — Purely private/off-chain systems lack decentralized, tamper-proof price feeds and automated resolution. Relying on centralized servers introduces single points of failure, trust issues, or downtime.
+- **Manual / slow settlement in prediction markets** — Outcomes often require manual resolution, which doesn't scale. Without decentralized triggers, markets stall or become manipulable.
+- **Lack of unified privacy-preserving stack** — No protocol combines high-leverage perps, outcome-based prediction, and true encrypted flows while still accessing reliable external data and automation.
 
-## How We’ve Addressed It
+Result: Traders either sacrifice privacy (and get exploited via MEV/front-running) or sacrifice decentralization/reliability (and accept centralized risks).
 
-### Architecture
+## How We’ve Addressed the Problem
 
-- **Backend (Node)**  
-  Auth (Privy + JWT), server-signed transactions for prediction market, vault, and perps. Private prediction is recorded off-chain (EIP-712 + exposure ledger); private perps use an off-chain margin ledger. Settlement pays winners from a pool via private-transfer. Price for perps comes from **Chainlink first**, with a **CRE-reported price as fallback** when the feed is down or missing.
+Marshmallow uses a **hybrid architecture** that keeps sensitive data private while leveraging decentralized infrastructure for the parts that must be trustless:
 
-- **Contracts**  
-  Perpetuals engine (margin, positions, funding, liquidation), price oracle (Chainlink), SimpleMarket for prediction markets, vault and policy engine for privacy and compliance.
+- **Off-chain private ledger** — Positions, margins, balances, and exposure (especially for perps and private predictions) are tracked off-chain in an encrypted / server-signed manner (EIP-712 structured data + backend ledger).
+- **Server-signed transactions** — Backend (Node.js + Privy auth + JWT) signs actions for prediction markets, vault interactions, and perps updates → users get fast, private execution without broadcasting everything on-chain.
+- **On-chain vault & core engine** — Deposits/withdrawals via secure vault; on-chain PerpetualsEngine handles margin math, funding, liquidations (visible but minimal); SimpleMarket for prediction basics.
+- **Hybrid oracle design** — Primary price from Chainlink Data Feeds → fallback to CRE-provided signals ensures continuity even during feed issues.
+- **CRE-driven automation** — Chainlink Runtime Environment (CRE) orchestrates decentralized signals (prices, funding) and settlement triggers → removes single-server dependency and enables objective, timely resolution for private prediction markets.
+- **Private settlement flows** — Winners receive payouts from a pool via private transfers; CRE can trigger these settlements securely after determining outcomes (via oracle, event, or AI).
 
-- **Frontend**  
-  Dashboard for perps, prediction markets, and privacy/vault flows; uses backend auth and trade APIs.
+This delivers **privacy where it matters** (order flow, positions, balances) + **decentralized reliability** where it must be trustless (prices, settlement).
 
-- **CRE integration**  
-  Chainlink Runtime is used to produce **perps signals** on a schedule and to allow **CRE-driven settlement** of private prediction markets, so the DON can drive both price/signals and settlement without a single trusted server.
+## How We’ve Used CRE (Chainlink Runtime Environment)
 
-### Perps: price and signals
+CRE acts as the **decentralized orchestration layer**, bringing reliable signals and automation into the privacy stack without central points of failure.
 
-- **Primary price:** Chainlink Data Feed (or adapter) via `getLatestPrice()`.
-- **Fallback:** Last price received from CRE. The backend stores the latest CRE signal (`POST /api/perps/cre-signal`) and, when the Chainlink feed is unavailable, returns that price so perps can keep running.
-- **CRE workflow:** A CRE cron job runs periodically (e.g. every 60s), calls the backend `GET /api/perps/price` (or in future, Chainlink Data Streams), then POSTs a normalized signal to `POST /api/perps/cre-signal`. So the DON contributes a decentralized signal layer; the backend trusts it when the primary feed is down.
+### 1. Perps Signals Workflow (`cre-workflow/perps-signals/`)
 
-### Prediction: CRE-driven settlement
+- **Trigger**: CronCapability (e.g., every 60 seconds).
+- **Flow**:
+  1. CRE uses HTTPClient (with DON consensus aggregation) to GET latest price from backend `/api/perps/price`.
+  2. Normalizes / computes optional signals (funding rate, risk metrics).
+  3. POSTs the agreed signal to backend `/api/perps/cre-signal` (secured with optional `X-CRE-Secret`).
+- **Backend role**: Stores latest CRE signal → `getLatestPrice()` returns Chainlink feed when available, falls back to CRE price during outages/downtime.
+- **Benefit**: Provides a decentralized backup oracle path → perps keep running reliably even if primary Chainlink feed stalls.
 
-- **Normal settlement:** `POST /api/prediction/settlement` with `{ marketId, outcome }` settles the private exposure ledger and pays winners from the pool.
-- **CRE settlement:** `POST /api/prediction/cre-settlement` does the same thing but is secured by `X-CRE-Secret` (same secret as perps). A CRE workflow (e.g. one that listens for `SettlementRequested` and resolves outcome via an oracle or AI) can call this endpoint to settle the **private** side after determining the outcome, so CRE drives both on-chain resolution and private payouts.
+### 2. CRE-Driven Prediction Market Settlement
 
----
+- **Endpoint**: `POST /api/prediction/cre-settlement` (body: `{ marketId, outcome }`, secured via `X-CRE-Secret` when configured).
+- **Behavior**: Mirrors manual settlement → updates private exposure ledger, computes payouts, transfers from pool to winners privately.
+- **CRE workflow use case**: Event-driven or cron-based workflow listens for resolution conditions (on-chain events, external oracle, AI verdict) → determines outcome → calls the endpoint to trigger private settlement.
+- **Benefit**: Decentralized DON consensus drives objective resolution and private payouts → no trusted server can censor or manipulate settlement.
 
-## How We’ve Used CRE
+### Summary Table
 
-### 1. Perps signals workflow (`cre-workflow/perps-signals/`)
+| CRE Usage             | Trigger  | Primary Action                              | Backend Role                                          | Key Benefit                                   |
+| --------------------- | -------- | ------------------------------------------- | ----------------------------------------------------- | --------------------------------------------- |
+| Perps signals         | Cron     | GET price → normalize → POST cre-signal     | Store fallback price; use when Chainlink unavailable  | Decentralized backup oracle for uptime        |
+| Prediction settlement | CRE call | POST cre-settlement with marketId + outcome | Settle private ledger & trigger pool → winner payouts | Trust-minimized, automated private resolution |
 
-- **Trigger:** Cron (e.g. every 60 seconds) via CRE **CronCapability**.
-- **Flow:**  
-  1. **HTTP GET** the backend `/api/perps/price` (CRE **HTTPClient** with consensus aggregation).  
-  2. Optionally compute or normalize a signal (e.g. funding, risk).  
-  3. **HTTP POST** to backend `/api/perps/cre-signal` with `{ signal, price, updatedAt, fundingRateBps? }` and optional `X-CRE-Secret`.
-- **Backend:** Stores the last CRE signal; `getLatestPrice()` uses Chainlink when available and falls back to this stored price when the feed is missing or fails.
-- **CRE capabilities:** Cron trigger, HTTP (GET + POST), consensus-identical aggregation for deterministic DON responses.
-
-This gives perps a **decentralized signal path**: the DON runs the cron and pushes a single, agreed signal to the backend, which then uses it as a fallback oracle.
-
-### 2. CRE-driven prediction settlement
-
-- **Endpoint:** `POST /api/prediction/cre-settlement` with body `{ marketId, outcome }`, header `X-CRE-Secret` when `CRE_WEBHOOK_SECRET` is set.
-- **Behavior:** Same as `POST /api/prediction/settlement`: calls `settleMarket(marketId, outcome)` and returns `{ ok, marketId, outcome, payouts }`.
-- **Use case:** A CRE workflow (e.g. event-driven or cron) that resolves market outcomes (on-chain events, oracle, or AI) can call this endpoint to settle the **private** prediction ledger and trigger pool → winner payouts, so CRE is the authority that triggers private settlement.
-
-### Summary
-
-| CRE usage            | Trigger     | Action                                                                 | Backend role                                      |
-|----------------------|------------|------------------------------------------------------------------------|---------------------------------------------------|
-| Perps signals        | Cron       | GET price → POST signal                                                | Store signal; use CRE price when Chainlink fails  |
-| Prediction settlement| CRE call   | POST `cre-settlement` with `marketId` + `outcome`                       | Same as manual settlement; pay winners from pool |
-
----
-
-## Repo structure
-
-```
-mashy/
-├── backend/          # Node API: auth, trade, prediction, perps, CRE endpoints
-├── frontend/         # Dashboard (perps, prediction, privacy)
-├── contracts/        # Solidity: PerpetualsEngine, SimpleMarket, vault, etc.
-├── cre-workflow/     # CRE project
-│   ├── perps-signals/   # Cron → price → POST cre-signal
-│   └── ...
-├── api-scripts/      # Scripts for private prediction, etc.
-└── docs/             # Flows and integration notes
-```
-
-## Quick start
-
-1. **Backend:** `cd backend && cp .env.example .env`, set `RPC_URL`, `JWT_SECRET`, optional `CRE_WEBHOOK_SECRET`, then `npm run dev`.
-2. **Perps CRE workflow:** In `cre-workflow/perps-signals/config.json` set `backendBaseUrl` (e.g. `http://localhost:3001`) and optionally `creWebhookSecret`. From `cre-workflow/`: `bun install` then `cre workflow simulate perps-signals --target local-simulation` (see [cre-workflow/README.md](cre-workflow/README.md)).
-3. **Frontend:** `cd frontend && npm install && npm run dev`.
-
-See [backend/README.md](backend/README.md) for API routes and [cre-workflow/README.md](cre-workflow/README.md) for CRE workflow details and simulation.
+By integrating CRE workflows (Cron, HTTPClient with consensus, secure secrets), Marshmallow achieves **privacy-preserving yet decentralized** perps and prediction markets—directly aligned with Chainlink's Privacy Standard and Confidential Compute vision.
