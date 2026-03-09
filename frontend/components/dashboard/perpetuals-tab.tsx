@@ -29,10 +29,10 @@ import { cn } from "@/lib/utils"
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function formatWei(wei: string): string {
+function formatWei(wei: string, decimals = 6): string {
   const n = BigInt(wei)
   if (n === 0n) return "0.00"
-  const d = Number(n) / 1e6
+  const d = Number(n) / 10 ** decimals
   return d.toFixed(2)
 }
 
@@ -374,11 +374,16 @@ function DepositModal({
       setStep("error")
       return
     }
-    const amountWei = (BigInt(Math.floor(Number(amount) * 1e6))).toString()
-
+    const amountNum = Number(amount)
+    if (Number.isNaN(amountNum) || amountNum <= 0) {
+      setError("Enter a valid amount")
+      setStep("error")
+      return
+    }
     try {
       setStep("minting")
-      const mintResult = await adminMint(walletAddress, amountWei)
+      const mintResult = await adminMint(walletAddress, amountNum)
+      const amountWei = mintResult.amountWei
       setTxHashes((h) => ({ ...h, mint: mintResult.txHash }))
 
       setStep("signing")
@@ -599,19 +604,21 @@ function WithdrawModal({
   onSuccess,
   jwtToken,
   freeMarginWei,
+  paymentTokenDecimals = 6,
 }: {
   open: boolean
   onClose: () => void
   onSuccess: () => void
   jwtToken: string
   freeMarginWei: string
+  paymentTokenDecimals?: number
 }) {
   const [amount, setAmount] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
 
-  const maxUsdc = Number(freeMarginWei) / 1e6
+  const maxUsdc = Number(freeMarginWei) / 10 ** paymentTokenDecimals
 
   const reset = () => {
     setAmount("")
@@ -622,7 +629,7 @@ function WithdrawModal({
 
   const handleWithdraw = async () => {
     if (!amount) return
-    const amountWei = (BigInt(Math.floor(Number(amount) * 1e6))).toString()
+    const amountWei = (BigInt(Math.floor(Number(amount) * 10 ** paymentTokenDecimals))).toString()
     setLoading(true)
     setError(null)
     try {
@@ -732,6 +739,7 @@ function TradeForm({
   onClose,
   onDeposit,
   onWithdraw,
+  paymentTokenDecimals = 6,
 }: {
   status: PerpsStatusType | null
   price: string | null
@@ -741,12 +749,14 @@ function TradeForm({
   onClose: () => void
   onDeposit: () => void
   onWithdraw: () => void
+  paymentTokenDecimals?: number
 }) {
   const [side, setSide] = useState<"long" | "short">("long")
   const [leverage, setLeverage] = useState(20)
   const [size, setSize] = useState("")
+  const decimals = paymentTokenDecimals ?? 6
 
-  const freeMargin = status ? Number(status.freeMarginWei) / 1e6 : 0
+  const freeMargin = status ? Number(status.freeMarginWei) / 10 ** decimals : 0
   const sizeNum = Number(size) || 0
   const marginRequired = sizeNum
   const orderValue = sizeNum * leverage
@@ -891,7 +901,7 @@ function TradeForm({
           <button
             type="button"
             onClick={() => {
-              const sizeWei = (BigInt(Math.floor(sizeNum * 1e6))).toString()
+              const sizeWei = (BigInt(Math.floor(sizeNum * 10 ** decimals))).toString()
               onOpen(side, sizeWei, leverage)
             }}
             disabled={actionLoading || loading || sizeNum <= 0 || sizeNum > freeMargin}
@@ -915,15 +925,15 @@ function TradeForm({
       <div className="space-y-1 border-t border-border p-3 text-[10px] text-muted-foreground">
         <div className="flex justify-between">
           <span>Account Equity</span>
-          <span className="text-foreground">{status ? formatWei(status.allocatedWei) : "0.00"}</span>
+          <span className="text-foreground">{status ? formatWei(status.allocatedWei, decimals) : "0.00"}</span>
         </div>
         <div className="flex justify-between">
           <span>Free Margin</span>
-          <span className="text-foreground">{status ? formatWei(status.freeMarginWei) : "0.00"}</span>
+          <span className="text-foreground">{status ? formatWei(status.freeMarginWei, decimals) : "0.00"}</span>
         </div>
         <div className="flex justify-between">
           <span>Margin In Use</span>
-          <span className="text-foreground">{status ? formatWei(status.marginInUseWei) : "0.00"}</span>
+          <span className="text-foreground">{status ? formatWei(status.marginInUseWei, decimals) : "0.00"}</span>
         </div>
         <div className="flex justify-between">
           <span>Unrealized P&L</span>
@@ -959,12 +969,15 @@ function PositionsTable({
   status,
   price,
   tradeHistory,
+  paymentTokenDecimals = 6,
 }: {
   status: PerpsStatusType | null
   price: string | null
   tradeHistory: TradeRecord[]
+  paymentTokenDecimals?: number
 }) {
   const [activeTab, setActiveTab] = useState<"positions" | "orders" | "history">("positions")
+  const decimals = paymentTokenDecimals
 
   const tabs = [
     { id: "positions" as const, label: "Positions", count: status?.position ? 1 : 0 },
@@ -1048,14 +1061,14 @@ function PositionsTable({
                   <td className={cn("py-1.5 font-medium", positionSide === "LONG" ? "text-green-400" : "text-red-400")}>
                     {positionSide}
                   </td>
-                  <td className="py-1.5">{formatWei(status.position.size.replace("-", ""))}</td>
+                  <td className="py-1.5">{formatWei(status.position.size.replace("-", ""), decimals)}</td>
                   <td className="py-1.5">${formatPrice8(status.position.entryPrice)}</td>
                   <td className="py-1.5">{price ? `$${formatPrice8(price)}` : "—"}</td>
                   <td className="py-1.5 text-yellow-500">
                     {liqPrice ? `$${formatPrice8(liqPrice)}` : "—"}
                   </td>
                   <td className="py-1.5">{status.position.leverage}x</td>
-                  <td className="py-1.5">{formatWei(status.position.marginWei)}</td>
+                  <td className="py-1.5">{formatWei(status.position.marginWei, decimals)}</td>
                   <td className={cn(
                     "py-1.5 text-right font-medium",
                     pnl !== null && pnl >= 0n ? "text-green-400" : "text-red-400"
@@ -1097,7 +1110,7 @@ function PositionsTable({
                     <td className={cn("py-1.5 font-medium", positionSide === "LONG" ? "text-green-400" : "text-red-400")}>
                       {positionSide}
                     </td>
-                    <td className="py-1.5">{formatWei(status.position.size.replace("-", ""))}</td>
+                    <td className="py-1.5">{formatWei(status.position.size.replace("-", ""), decimals)}</td>
                     <td className="py-1.5">${formatPrice8(status.position.entryPrice)}</td>
                     <td className="py-1.5">{status.position.leverage}x</td>
                   </tr>
@@ -1142,7 +1155,7 @@ function PositionsTable({
                     <td className={cn("py-1.5", t.side === "long" ? "text-green-400" : "text-red-400")}>
                       {t.side.toUpperCase()}
                     </td>
-                    <td className="py-1.5">{formatWei(t.size)}</td>
+                    <td className="py-1.5">{formatWei(t.size, decimals)}</td>
                     <td className="py-1.5">${formatPrice8(t.entryPrice)}</td>
                     <td className="py-1.5">—</td>
                     <td className="py-1.5">{t.leverage}x</td>
@@ -1163,7 +1176,7 @@ function PositionsTable({
                       <td className={cn("py-1.5", t.side === "long" ? "text-green-400" : "text-red-400")}>
                         {t.side.toUpperCase()}
                       </td>
-                      <td className="py-1.5">{formatWei(t.size)}</td>
+                      <td className="py-1.5">{formatWei(t.size, decimals)}</td>
                       <td className="py-1.5">${formatPrice8(t.entryPrice)}</td>
                       <td className="py-1.5">{t.exitPrice ? `$${formatPrice8(t.exitPrice)}` : "—"}</td>
                       <td className="py-1.5">{t.leverage}x</td>
@@ -1409,11 +1422,17 @@ export function PerpetualsTab() {
             onClose={handleClose}
             onDeposit={() => setDepositOpen(true)}
             onWithdraw={() => setWithdrawOpen(true)}
+            paymentTokenDecimals={appConfig?.paymentTokenDecimals ?? 6}
           />
         </div>
       </div>
 
-      <PositionsTable status={status} price={price} tradeHistory={tradeHistory} />
+      <PositionsTable
+        status={status}
+        price={price}
+        tradeHistory={tradeHistory}
+        paymentTokenDecimals={appConfig?.paymentTokenDecimals ?? 6}
+      />
 
       {token && walletAddress && (
         <DepositModal
@@ -1433,6 +1452,7 @@ export function PerpetualsTab() {
           onSuccess={fetchStatus}
           jwtToken={token}
           freeMarginWei={status?.freeMarginWei ?? "0"}
+          paymentTokenDecimals={appConfig?.paymentTokenDecimals ?? 6}
         />
       )}
     </div>

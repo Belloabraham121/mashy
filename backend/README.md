@@ -16,6 +16,8 @@ The backend loads addresses from **contracts/deployments/\<chainId\>.json** when
 
 The **deployer** address (from `PRIVATE_KEY` in contracts deploy) is the owner of `SimpleToken` and can mint. Set **DEPLOYER_PRIVATE_KEY** in the backend to the same key to enable **POST /api/admin/mint** (faucet).
 
+**Token decimals:** The app assumes a USDC-style payment token (6 decimals). The `SimpleToken` contract in this repo overrides `decimals()` to return 6. The backend exposes `paymentTokenDecimals` (default 6) in the config API so the frontend can convert human amounts (e.g. "100") to wei correctly for mint/deposit/prediction. If you use an existing token with 18 decimals, set **PAYMENT_TOKEN_DECIMALS=18** in `.env` so the frontend mints the correct amount.
+
 ## Setup
 
 ```bash

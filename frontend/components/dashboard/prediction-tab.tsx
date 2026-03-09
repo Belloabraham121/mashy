@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { predictionExposure, predictionMarkets, type ExposureEntry, type OnChainMarket } from "@/lib/api"
+import { predictionExposure, predictionMarkets, getConfig, type ExposureEntry, type OnChainMarket } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 const CATEGORIES = [
@@ -35,15 +35,15 @@ function guessCategory(question: string): string {
   return "Markets"
 }
 
-function formatVolume(totalWei: string): string {
-  const n = Number(totalWei) / 1e6
+function formatVolume(totalWei: string, decimals = 6): string {
+  const n = Number(BigInt(totalWei)) / 10 ** decimals
   if (n === 0) return "$0 Vol."
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M Vol.`
   if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K Vol.`
   return `$${n.toFixed(0)} Vol.`
 }
 
-function mapOnChainMarket(m: OnChainMarket): Market {
+function mapOnChainMarket(m: OnChainMarket, decimals = 6): Market {
   const yesTotal = BigInt(m.predTotals.yes)
   const noTotal = BigInt(m.predTotals.no)
   const total = yesTotal + noTotal
@@ -67,7 +67,7 @@ function mapOnChainMarket(m: OnChainMarket): Market {
       { label: "Yes", probability: yesPct },
       { label: "No", probability: noPct },
     ],
-    volume: formatVolume((yesTotal + noTotal).toString()),
+    volume: formatVolume((yesTotal + noTotal).toString(), decimals),
     isLive,
   }
 }
@@ -381,11 +381,11 @@ function FeaturedMarketHero({ rawMarkets }: { rawMarkets: OnChainMarket[] }) {
   )
 }
 
-function formatWei(wei: string): string {
+function formatWei(wei: string, decimals = 6): string {
   const n = BigInt(wei)
   if (n === 0n) return "0"
-  const d = Number(n) / 1e6
-  return d >= 1 ? d.toFixed(2) : "< 0.01"
+  const d = Number(n) / 10 ** decimals
+  return d >= 1 ? d.toFixed(2) : d > 0 ? "< 0.01" : "0"
 }
 
 // ─── Market Card ─────────────────────────────────────────────────────────────
@@ -459,7 +459,13 @@ function MarketCard({ market }: { market: Market }) {
 }
 
 // ─── Your Exposure ───────────────────────────────────────────────────────────
-function ExposureBar({ exposure }: { exposure: ExposureEntry[] }) {
+function ExposureBar({
+  exposure,
+  paymentTokenDecimals = 6,
+}: {
+  exposure: ExposureEntry[]
+  paymentTokenDecimals?: number
+}) {
   if (exposure.length === 0) return null
   return (
     <div className="border border-border p-3">
@@ -476,7 +482,7 @@ function ExposureBar({ exposure }: { exposure: ExposureEntry[] }) {
             <span className={e.outcome === "Yes" ? "text-green-400" : "text-red-400"}>
               {e.outcome}
             </span>
-            <span className="text-muted-foreground">{formatWei(e.amountWei)}</span>
+            <span className="text-muted-foreground">{formatWei(e.amountWei, paymentTokenDecimals)}</span>
           </span>
         ))}
       </div>
@@ -491,6 +497,11 @@ export function PredictionTab() {
   const [rawMarkets, setRawMarkets] = useState<OnChainMarket[]>([])
   const [marketsLoading, setMarketsLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState("All")
+  const [paymentTokenDecimals, setPaymentTokenDecimals] = useState(6)
+
+  useEffect(() => {
+    getConfig().then((c) => setPaymentTokenDecimals(c.paymentTokenDecimals ?? 6)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     predictionExposure()
@@ -503,11 +514,11 @@ export function PredictionTab() {
     predictionMarkets()
       .then((onChain) => {
         setRawMarkets(onChain)
-        setMarkets(onChain.map(mapOnChainMarket))
+        setMarkets(onChain.map((m) => mapOnChainMarket(m, paymentTokenDecimals)))
       })
       .catch(() => {})
       .finally(() => setMarketsLoading(false))
-  }, [])
+  }, [paymentTokenDecimals])
 
   const filtered =
     activeCategory === "All"
@@ -520,7 +531,7 @@ export function PredictionTab() {
       <FeaturedMarketHero rawMarkets={rawMarkets} />
 
       {/* Exposure banner */}
-      <ExposureBar exposure={exposure} />
+      <ExposureBar exposure={exposure} paymentTokenDecimals={paymentTokenDecimals} />
 
       {/* Category filters */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1">

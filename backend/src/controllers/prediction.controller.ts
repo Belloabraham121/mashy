@@ -12,6 +12,7 @@ import {
   settleMarket,
   isOutcome,
 } from "../services/prediction.service.js";
+import { getExposureByMarket } from "../services/exposure.service.js";
 
 const SIMPLE_MARKET_ABI = [
   "function nextMarketId() view returns (uint256)",
@@ -51,7 +52,7 @@ predictionController.get("/markets", async (_req: Request, res: Response): Promi
     const calls = Array.from({ length: count }, (_, i) => contract.getMarket(i));
     const results = await Promise.all(calls);
 
-    const markets = results.map((m, i) => serializeMarket(m, i));
+    const markets = results.map((m, i) => mergePrivateExposure(serializeMarket(m, i)));
 
     res.json(markets);
   } catch (err) {
@@ -76,6 +77,38 @@ function serializeMarket(m: ethers.Result, id: number) {
   };
 }
 
+/** Add private prediction exposure to chain market so volume/counts/chances include private bets. */
+function mergePrivateExposure(
+  market: ReturnType<typeof serializeMarket>,
+): ReturnType<typeof serializeMarket> {
+  const entries = getExposureByMarket(market.id);
+  let privateNoTotal = 0n;
+  let privateYesTotal = 0n;
+  let privateNoCount = 0;
+  let privateYesCount = 0;
+  for (const e of entries) {
+    const amt = BigInt(e.amountWei);
+    if (e.outcome === "No") {
+      privateNoTotal += amt;
+      privateNoCount += 1;
+    } else {
+      privateYesTotal += amt;
+      privateYesCount += 1;
+    }
+  }
+  return {
+    ...market,
+    predCounts: {
+      no: (BigInt(market.predCounts.no) + BigInt(privateNoCount)).toString(),
+      yes: (BigInt(market.predCounts.yes) + BigInt(privateYesCount)).toString(),
+    },
+    predTotals: {
+      no: (BigInt(market.predTotals.no) + privateNoTotal).toString(),
+      yes: (BigInt(market.predTotals.yes) + privateYesTotal).toString(),
+    },
+  };
+}
+
 predictionController.get("/markets/:id", async (req: Request, res: Response): Promise<void> => {
   try {
     if (!config.rpcUrl || !config.marketAddress) {
@@ -95,7 +128,7 @@ predictionController.get("/markets/:id", async (req: Request, res: Response): Pr
       return;
     }
     const m = await contract.getMarket(id);
-    res.json(serializeMarket(m, id));
+    res.json(mergePrivateExposure(serializeMarket(m, id)));
   } catch (err) {
     console.error("[prediction/markets/:id]", err);
     res.status(500).json({ error: "Failed to fetch market" });
@@ -188,6 +221,29 @@ predictionController.post("/private-prediction", async (req: Request, res: Respo
 
 predictionController.post("/settlement", async (req: Request, res: Response): Promise<void> => {
   try {
+    const { marketId, outcome } = req.body;
+    if (marketId === undefined || !outcome) {
+      res.status(400).json({ error: "Missing marketId or outcome" });
+      return;
+    }
+    if (!isOutcome(outcome)) {
+      res.status(400).json({ error: "outcome must be Yes or No" });
+      return;
+    }
+    const { payouts } = await settleMarket(Number(marketId), outcome);
+    res.json({ ok: true, marketId: Number(marketId), outcome, payouts });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+predictionController.post("/cre-settlement", async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (config.creWebhookSecret && req.headers["x-cre-secret"] !== config.creWebhookSecret) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
     const { marketId, outcome } = req.body;
     if (marketId === undefined || !outcome) {
       res.status(400).json({ error: "Missing marketId or outcome" });

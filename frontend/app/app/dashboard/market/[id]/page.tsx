@@ -108,18 +108,25 @@ function ProbabilityChart({ yesPct, noPct }: { yesPct: number; noPct: number }) 
 
 // ─── Order Book Summary ───────────────────────────────────────────────────────
 
-function OrderBookSummary({ market }: { market: OnChainMarket }) {
+function OrderBookSummary({
+  market,
+  paymentTokenDecimals = 6,
+}: {
+  market: OnChainMarket
+  paymentTokenDecimals?: number
+}) {
   const yesTotal = BigInt(market.predTotals.yes)
   const noTotal = BigInt(market.predTotals.no)
   const total = yesTotal + noTotal
   const yesPct = total > 0n ? Number((yesTotal * 100n) / total) : 50
   const noPct = 100 - yesPct
+  const fmt = (wei: string) => formatWei(wei, paymentTokenDecimals)
 
   return (
     <div className="border border-border bg-card/30 p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="font-mono text-xs font-medium text-foreground">Order Book</h3>
-        <span className="font-mono text-[10px] text-muted-foreground">{formatWei(total.toString())} Vol.</span>
+        <span className="font-mono text-[10px] text-muted-foreground">{fmt(total.toString())} Vol.</span>
       </div>
       <div className="mb-3 flex h-2 overflow-hidden rounded-sm">
         <div className="bg-green-500/60 transition-all" style={{ width: `${yesPct}%` }} />
@@ -133,7 +140,7 @@ function OrderBookSummary({ market }: { market: OnChainMarket }) {
           </div>
           <div className="flex items-center gap-3">
             <span className="text-muted-foreground">{market.predCounts.yes} bets</span>
-            <span className="text-green-400 font-medium">{formatWei(market.predTotals.yes)}</span>
+            <span className="text-green-400 font-medium">{fmt(market.predTotals.yes)}</span>
           </div>
         </div>
         <div className="flex items-center justify-between font-mono text-xs">
@@ -143,7 +150,7 @@ function OrderBookSummary({ market }: { market: OnChainMarket }) {
           </div>
           <div className="flex items-center gap-3">
             <span className="text-muted-foreground">{market.predCounts.no} bets</span>
-            <span className="text-red-400 font-medium">{formatWei(market.predTotals.no)}</span>
+            <span className="text-red-400 font-medium">{fmt(market.predTotals.no)}</span>
           </div>
         </div>
       </div>
@@ -204,11 +211,16 @@ function PredictModal({
 
   const handlePredict = async () => {
     if (!appConfig || !walletAddress || !amount) return
-    const amountWei = BigInt(Math.floor(Number(amount) * 1e6)).toString()
-
+    const amountNum = Number(amount)
+    if (Number.isNaN(amountNum) || amountNum <= 0) {
+      setError("Enter a valid amount")
+      setStep("error")
+      return
+    }
     try {
       setStep("minting")
-      const mintResult = await adminMint(walletAddress, amountWei)
+      const mintResult = await adminMint(walletAddress, amountNum)
+      const amountWei = mintResult.amountWei
       setTxHashes((h) => ({ ...h, mint: mintResult.txHash }))
 
       setStep("signing")
@@ -405,7 +417,7 @@ function PredictModal({
         {step === "error" && (
           <div className="space-y-4">
             <div className="border border-red-500/30 bg-red-500/10 p-3">
-              <p className="font-mono text-xs text-red-400 break-words">{error}</p>
+              <p className="font-mono text-xs text-red-400 wrap-break-word">{error}</p>
             </div>
 
             {Object.entries(txHashes).length > 0 && (
@@ -625,6 +637,8 @@ export default function MarketDetailPage() {
   const yesPct = total > 0n ? Number((yesTotal * 100n) / total) : 50
   const noPct = 100 - yesPct
   const isOpen = market.status === "Open" && market.marketClose * 1000 > Date.now()
+  const decimals = appConfig?.paymentTokenDecimals ?? 6
+  const fmt = (wei: string) => formatWei(wei, decimals)
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-4">
@@ -675,7 +689,7 @@ export default function MarketDetailPage() {
         </div>
 
         <div className="mt-3 flex items-center gap-4 font-mono text-xs text-muted-foreground">
-          <span>{formatWei(total.toString())} Vol.</span>
+          <span>{fmt(total.toString())} Vol.</span>
           <span>{Number(market.predCounts.yes) + Number(market.predCounts.no)} predictions</span>
           <span>Opened {new Date(market.marketOpen * 1000).toLocaleDateString()}</span>
         </div>
@@ -716,7 +730,7 @@ export default function MarketDetailPage() {
             </div>
           </div>
 
-          <OrderBookSummary market={market} />
+          <OrderBookSummary market={market} paymentTokenDecimals={decimals} />
 
           {exposure.length > 0 && (
             <div className="border border-border bg-card/30 p-4">
@@ -731,7 +745,7 @@ export default function MarketDetailPage() {
                       )} />
                       <span className="text-foreground">{e.outcome}</span>
                     </div>
-                    <span className="text-muted-foreground">{formatWei(e.amountWei)}</span>
+                    <span className="text-muted-foreground">{fmt(e.amountWei)}</span>
                   </div>
                 ))}
               </div>

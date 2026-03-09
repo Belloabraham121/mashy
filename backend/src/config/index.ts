@@ -44,6 +44,8 @@ export const config = {
     "0xE588a6c73933BFD66Af9b4A07d48bcE59c0D2d13"
   ),
   paymentTokenAddress: addr("PAYMENT_TOKEN_ADDRESS", deployment?.paymentToken),
+  /** Payment token decimals (e.g. 6 for USDC-style, 18 for default ERC20). Used so frontend mints human amount correctly. */
+  paymentTokenDecimals: parseInt(process.env.PAYMENT_TOKEN_DECIMALS ?? "6", 10),
   marketAddress: addr("MARKET_ADDRESS", deployment?.simpleMarket),
   policyEngineAddress: addr("POLICY_ENGINE_ADDRESS", deployment?.policyEngine),
   privateTokenApiUrl:

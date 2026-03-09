@@ -174,6 +174,8 @@ export interface AppConfig {
   chainId: number
   poolAddress: string
   paymentTokenAddress: string
+  /** Payment token decimals (6 = USDC-style, 18 = default ERC20). Use for human amount → wei. */
+  paymentTokenDecimals?: number
   vaultAddress: string
   perpsEngineAddress: string
   marketAddress: string
@@ -187,14 +189,21 @@ export async function getConfig(): Promise<AppConfig> {
 }
 
 // --- Admin ---
+/** Mint payment token. Pass human amount (e.g. 100) so backend uses token decimals from chain. */
 export async function adminMint(
   to: string,
-  amountWei?: string
+  amountOrWei?: number | string
 ): Promise<{ ok: boolean; to: string; amountWei: string; txHash: string }> {
+  const body: { to: string; amount?: number; amountWei?: string } = { to }
+  if (typeof amountOrWei === "number" && !Number.isNaN(amountOrWei)) {
+    body.amount = amountOrWei
+  } else if (typeof amountOrWei === "string") {
+    body.amountWei = amountOrWei
+  }
   const res = await fetch(`${API_BASE}/api/admin/mint`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ to, amountWei }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))

@@ -15,6 +15,7 @@ import {
   computePnLCollateral,
 } from "../services/perps.service.js";
 import { getLatestPrice } from "../services/price.service.js";
+import { setLastCreSignal, getLastCreSignal } from "../services/cre-signal.service.js";
 import {
   allocateMargin,
   openPrivatePosition,
@@ -99,12 +100,22 @@ perpsController.post("/cre-signal", async (req, res: Response): Promise<void> =>
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
+    setLastCreSignal({ signal, price, updatedAt, fundingRateBps });
     console.log("[CRE signal]", { signal, fundingRateBps, price, updatedAt });
     res.json({ ok: true, received: { signal, fundingRateBps, price, updatedAt } });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Signal failed";
     res.status(500).json({ error: message });
   }
+});
+
+perpsController.get("/cre-signal", (_req, res: Response): void => {
+  const last = getLastCreSignal();
+  if (!last) {
+    res.status(404).json({ error: "No CRE signal received yet" });
+    return;
+  }
+  res.json(last);
 });
 
 perpsController.use(authenticate);
